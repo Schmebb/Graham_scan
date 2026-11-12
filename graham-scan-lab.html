@@ -1,0 +1,700 @@
+<title>Graham Scan Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: drafting-table split. Graph-paper board + playback on the left, code editor on the right; stacks on phones. */
+:root {
+  --bg: #eef2f4;
+  --panel: #fbfcfd;
+  --ink: #18232e;
+  --muted: #5b6b78;
+  --line: #d3dde3;
+  --grid: #dbe7ee;
+  --grid-major: #bfd2dd;
+  --accent: #2448c9;
+  --accent-soft: rgba(36, 72, 201, 0.12);
+  --test: #c77a00;
+  --good: #1d8a52;
+  --bad: #c8343b;
+  --code-bg: #f4f7f9;
+  --kw: #8a2bb0;
+  --str: #1d7a4c;
+  --num: #b0520b;
+  --com: #7d8b96;
+  --fn: #2448c9;
+  --f-display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --panel: #151d25; --ink: #e3eaf0; --muted: #8fa0ad; --line: #26323d;
+    --grid: #1b2630; --grid-major: #263643; --accent: #7c9dff; --accent-soft: rgba(124, 157, 255, 0.16);
+    --test: #f2a93b; --good: #45c483; --bad: #ff6b6f; --code-bg: #111920;
+    --kw: #d39bf0; --str: #7fd3a4; --num: #f3a668; --com: #66788a; --fn: #8fb0ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --panel: #151d25; --ink: #e3eaf0; --muted: #8fa0ad; --line: #26323d;
+  --grid: #1b2630; --grid-major: #263643; --accent: #7c9dff; --accent-soft: rgba(124, 157, 255, 0.16);
+  --test: #f2a93b; --good: #45c483; --bad: #ff6b6f; --code-bg: #111920;
+  --kw: #d39bf0; --str: #7fd3a4; --num: #f3a668; --com: #66788a; --fn: #8fb0ff;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.5; }
+.app { max-width: 1440px; margin: 0 auto; padding-block: 20px 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: 1.6rem; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 70ch; }
+.main { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 960px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; min-width: 0; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.bar.bottom { border-bottom: 0; border-top: 1px solid var(--line); }
+.label { font-family: var(--f-display); font-weight: 500; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.spacer { flex: 1; }
+button, .btn { font: 500 13px var(--f-body); color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, textarea:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+button.primary:hover { filter: brightness(1.08); }
+button.icon { padding: 6px 8px; }
+button svg { width: 14px; height: 14px; fill: currentColor; }
+button:disabled { opacity: 0.45; cursor: default; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+.count { font-family: var(--f-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.board-wrap { position: relative; width: 100%; aspect-ratio: 4 / 3; max-width: 100%; }
+canvas#board { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; display: block; }
+.hint { font-size: 12px; color: var(--muted); padding: 0 12px 10px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 12px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.sw.dot { width: 9px; height: 9px; border-radius: 50%; }
+.sw.ring { width: 10px; height: 10px; border-radius: 50%; background: transparent !important; border: 2px solid; }
+.playback { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.scrub { flex: 1 1 160px; min-width: 120px; accent-color: var(--accent); }
+.speed { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.speed input { width: 90px; accent-color: var(--accent); }
+.caption { padding: 12px; border-top: 1px solid var(--line); min-height: 64px; display: flex; flex-direction: column; gap: 4px; }
+.caption .stepno { font-family: var(--f-mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.caption .text { font-family: var(--f-mono); font-size: 13px; overflow-wrap: anywhere; }
+.caption .text b.good { color: var(--good); }
+.caption .text b.bad { color: var(--bad); }
+.caption .text b.test { color: var(--test); }
+
+/* editor */
+.editor { position: relative; display: flex; height: 560px; background: var(--code-bg); font-family: var(--f-mono); font-size: 13px; line-height: 20px; overflow: hidden; }
+@media (max-width: 960px) { .editor { height: 440px; } }
+.gutter { flex: 0 0 auto; padding: 10px 8px 10px 12px; color: var(--com); text-align: right; user-select: none; overflow: hidden; white-space: pre; font-variant-numeric: tabular-nums; border-right: 1px solid var(--line); }
+.gutter .err { color: var(--bad); font-weight: 600; }
+.code-area { position: relative; flex: 1; min-width: 0; }
+.code-area pre, .code-area textarea { position: absolute; inset: 0; margin: 0; padding: 10px 12px; font: inherit; line-height: inherit; white-space: pre; tab-size: 2; overflow: auto; border: 0; }
+.code-area pre { color: var(--ink); pointer-events: none; overflow: hidden; }
+.code-area textarea { color: transparent; background: transparent; caret-color: var(--ink); resize: none; outline: none; }
+.code-area textarea::selection { background: var(--accent-soft); color: transparent; }
+.tk-k { color: var(--kw); } .tk-s { color: var(--str); } .tk-n { color: var(--num); } .tk-c { color: var(--com); font-style: italic; } .tk-f { color: var(--fn); font-weight: 600; }
+.status { padding: 10px 12px; border-top: 1px solid var(--line); font-size: 13px; display: flex; gap: 8px; align-items: flex-start; min-height: 42px; }
+.status .pill { font: 600 11px var(--f-display); letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; flex: 0 0 auto; }
+.status.ok { color: var(--good); } .status.err { color: var(--bad); } .status.idle { color: var(--muted); }
+.status .msg { color: var(--ink); overflow-wrap: anywhere; }
+details.ref { border-top: 1px solid var(--line); }
+details.ref summary { padding: 10px 12px; cursor: pointer; font-family: var(--f-display); font-weight: 500; }
+.ref-body { padding: 0 12px 12px; display: grid; gap: 6px; font-size: 13px; }
+.ref-body code { font-family: var(--f-mono); font-size: 12.5px; color: var(--fn); }
+.ref-body p { margin: 0; color: var(--muted); max-width: 70ch; }
+.ref-row { display: grid; grid-template-columns: minmax(0, 13em) minmax(0, 1fr); gap: 10px; }
+@media (max-width: 520px) { .ref-row { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+kbd { font-family: var(--f-mono); font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+</style>
+
+<div class="app">
+  <header>
+    <h1>Graham Scan Lab</h1>
+    <p>Place points on the grid, write <code>grahamScan(points)</code>, and press Play to watch your code build the convex hull one step at a time.</p>
+  </header>
+
+  <div class="main">
+    <section class="panel" aria-label="Point grid and playback">
+      <div class="bar">
+        <span class="label">Points</span>
+        <span class="count" id="count">0 points</span>
+        <span class="spacer"></span>
+        <label class="toggle" for="snap"><input type="checkbox" id="snap" checked> Snap to grid</label>
+        <button id="btn-random" type="button">Random 15</button>
+        <button id="btn-sample" type="button">Example set</button>
+        <button id="btn-clear" type="button">Clear</button>
+      </div>
+      <div class="board-wrap"><canvas id="board" aria-label="Point grid. Click to add a point, click a point to remove it, drag to move it."></canvas></div>
+      <div class="hint">Click to add a point. Click a point to remove it. Drag a point to move it.</div>
+      <div class="legend">
+        <span><i class="sw ring" style="border-color: var(--ink)"></i>Pivot</span>
+        <span><i class="sw ring" style="border-color: var(--test)"></i>Point being considered</span>
+        <span><i class="sw" style="background: var(--accent)"></i>Stack (hull so far)</span>
+        <span><i class="sw" style="background: var(--good)"></i>Left turn</span>
+        <span><i class="sw" style="background: var(--bad)"></i>Right turn / collinear</span>
+      </div>
+      <div class="playback">
+        <button class="icon" id="btn-start" type="button" title="Go to start" aria-label="Go to start"><svg viewBox="0 0 16 16"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg></button>
+        <button class="icon" id="btn-back" type="button" title="Step back" aria-label="Step back"><svg viewBox="0 0 16 16"><path d="M11 2v12L3 8z"/></svg></button>
+        <button class="primary" id="btn-play" type="button"><svg viewBox="0 0 16 16"><path d="M4 2v12l10-6z"/></svg><span>Play</span></button>
+        <button class="icon" id="btn-fwd" type="button" title="Step forward" aria-label="Step forward"><svg viewBox="0 0 16 16"><path d="M5 2v12l8-6z"/></svg></button>
+        <button class="icon" id="btn-end" type="button" title="Go to end" aria-label="Go to end"><svg viewBox="0 0 16 16"><path d="M11 2h2v12h-2zM2 2v12l8-6z"/></svg></button>
+        <input class="scrub" id="scrub" type="range" min="0" max="0" value="0" aria-label="Step">
+        <label class="speed" for="speed">Speed <input id="speed" type="range" min="0" max="100" value="55"></label>
+      </div>
+      <div class="caption" aria-live="polite">
+        <div class="stepno" id="stepno">No trace yet</div>
+        <div class="text" id="caption">Press Play to run your code on these points.</div>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Code editor">
+      <div class="bar">
+        <span class="label">Your code</span>
+        <span class="spacer"></span>
+        <button id="btn-starter" type="button">Load starter</button>
+        <button id="btn-solution" type="button">Load solution</button>
+        <button class="primary" id="btn-run" type="button" title="Run and play (Ctrl/Cmd + Enter)"><svg viewBox="0 0 16 16"><path d="M4 2v12l10-6z"/></svg>Run</button>
+      </div>
+      <div class="editor">
+        <div class="gutter" id="gutter">1</div>
+        <div class="code-area">
+          <pre id="hl" aria-hidden="true"></pre>
+          <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-label="JavaScript code"></textarea>
+        </div>
+      </div>
+      <div class="status idle" id="status"><span class="pill">Ready</span><span class="msg">Edit the code, then press Run or <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd>.</span></div>
+      <details class="ref" open>
+        <summary>Helper functions</summary>
+        <div class="ref-body">
+          <p>Each point is <code>{ x, y }</code> with y pointing up. Return the hull as an array of points in boundary order. Each helper call becomes one step in the animation.</p>
+          <div class="ref-row"><code>pivot(p)</code><span>Mark the starting point (lowest y, then lowest x).</span></div>
+          <div class="ref-row"><code>sortOrder(arr)</code><span>Show the sorted order as numbers next to each point.</span></div>
+          <div class="ref-row"><code>consider(p)</code><span>Highlight the point you are about to process.</span></div>
+          <div class="ref-row"><code>cross(o, a, b)</code><span>Returns (a−o)×(b−o) and draws the turn. Positive is a left (counter-clockwise) turn.</span></div>
+          <div class="ref-row"><code>show(stack)</code><span>Draw the current stack as the hull in progress.</span></div>
+          <div class="ref-row"><code>log(...values)</code><span>Print a message in the step caption.</span></div>
+          <p>Use your own math (for example <code>Math.atan2</code>) inside the sort comparator, since every <code>cross()</code> call adds a step. Code runs in a sandbox and stops after 3 seconds.</p>
+        </div>
+      </details>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const W = 24, H = 18;
+  const SAMPLE = [[3,4],[6,2],[11,3],[17,2],[21,6],[19,11],[14,15],[8,14],[4,10],[9,7],[13,8],[16,6],[7,10],[12,11],[11,6]];
+
+  const SOLUTION = `// Graham scan: returns the hull in counter-clockwise order.
+function grahamScan(points) {
+  if (points.length < 3) return points;
+
+  // 1. Pivot: lowest y, ties broken by lowest x
+  let p0 = points[0];
+  for (const p of points) {
+    if (p.y < p0.y || (p.y === p0.y && p.x < p0.x)) p0 = p;
+  }
+  pivot(p0);
+
+  // 2. Sort the other points by polar angle around the pivot
+  const rest = points.filter(p => p !== p0);
+  rest.sort((a, b) => {
+    const angA = Math.atan2(a.y - p0.y, a.x - p0.x);
+    const angB = Math.atan2(b.y - p0.y, b.x - p0.x);
+    if (angA !== angB) return angA - angB;
+    return dist2(p0, a) - dist2(p0, b); // closer first on ties
+  });
+  sortOrder(rest);
+
+  // 3. Walk the sorted points, popping while we make a right turn
+  const stack = [p0];
+  show(stack);
+  for (const p of rest) {
+    consider(p);
+    while (stack.length >= 2 &&
+           cross(stack[stack.length - 2], stack[stack.length - 1], p) <= 0) {
+      stack.pop();
+      show(stack);
+    }
+    stack.push(p);
+    show(stack);
+  }
+  return stack;
+}
+
+function dist2(a, b) {
+  return (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+}
+`;
+
+  const STARTER = `// Write the Graham scan here. Return the hull points in order.
+function grahamScan(points) {
+  if (points.length < 3) return points;
+
+  // 1. Find the pivot: the lowest point (smallest y, then smallest x).
+  let p0 = points[0];
+  // TODO
+  pivot(p0);
+
+  // 2. Sort the remaining points by polar angle around p0.
+  const rest = points.filter(p => p !== p0);
+  // TODO: rest.sort((a, b) => ...)
+  sortOrder(rest);
+
+  // 3. Scan: keep a stack, pop while the last two points and p
+  //    do not make a left turn (cross(...) <= 0).
+  const stack = [p0];
+  show(stack);
+  for (const p of rest) {
+    consider(p);
+    // TODO: while (...) { stack.pop(); show(stack); }
+    stack.push(p);
+    show(stack);
+  }
+  return stack;
+}
+`;
+
+  // ---------- state ----------
+  let points = [];
+  let trace = null;      // { events, result, error, verdict }
+  let step = 0;
+  let playing = false;
+  let timer = null;
+  let dirty = true;
+  let errLine = null;
+
+  const $ = id => document.getElementById(id);
+  const canvas = $('board'), ctx = canvas.getContext('2d');
+  const codeEl = $('code'), hlEl = $('hl'), gutterEl = $('gutter');
+
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+
+  // ---------- naming ----------
+  const key = p => `${+p.x.toFixed(4)},${+p.y.toFixed(4)}`;
+  function nameOf(p) {
+    if (!p) return '?';
+    const i = points.findIndex(q => key(q) === key(p));
+    return i >= 0 ? 'P' + i : `(${fmt(p.x)}, ${fmt(p.y)})`;
+  }
+  const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+  const pt = p => `${nameOf(p)}(${fmt(p.x)},${fmt(p.y)})`;
+
+  // ---------- geometry for checking ----------
+  const crossV = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  function refHull(pts) {
+    const m = new Map(); pts.forEach(p => m.set(key(p), p));
+    const s = [...m.values()].sort((a, b) => a.x - b.x || a.y - b.y);
+    if (s.length < 3) return s;
+    const lo = [], up = [];
+    for (const p of s) { while (lo.length >= 2 && crossV(lo[lo.length - 2], lo[lo.length - 1], p) <= 1e-9) lo.pop(); lo.push(p); }
+    for (let i = s.length - 1; i >= 0; i--) { const p = s[i]; while (up.length >= 2 && crossV(up[up.length - 2], up[up.length - 1], p) <= 1e-9) up.pop(); up.push(p); }
+    return lo.slice(0, -1).concat(up.slice(0, -1));
+  }
+  function onSegment(p, a, b) {
+    if (Math.abs(crossV(a, b, p)) > 1e-7) return false;
+    return p.x >= Math.min(a.x, b.x) - 1e-9 && p.x <= Math.max(a.x, b.x) + 1e-9 && p.y >= Math.min(a.y, b.y) - 1e-9 && p.y <= Math.max(a.y, b.y) + 1e-9;
+  }
+  function verify(result) {
+    if (!Array.isArray(result)) return { ok: false, msg: 'grahamScan must return an array of points.' };
+    const ref = refHull(points);
+    if (points.length < 3) return { ok: true, msg: 'Fewer than 3 points, so there is nothing to scan. Add more points.' };
+    if (ref.length < 3) return { ok: true, msg: 'All points are collinear, so the hull is a line segment.' };
+    const inputKeys = new Set(points.map(key));
+    const bad = result.filter(p => !p || !inputKeys.has(key(p)));
+    if (bad.length) return { ok: false, msg: 'The result contains values that are not input points.' };
+    const resKeys = new Set(result.map(key));
+    if (resKeys.size !== result.length) return { ok: false, msg: 'The result lists the same point more than once.' };
+    const missing = ref.filter(p => !resKeys.has(key(p)));
+    if (missing.length) return { ok: false, msg: `Missing hull vertex ${missing.map(nameOf).join(', ')}.` };
+    const inside = result.filter(p => !ref.some((a, i) => onSegment(p, a, ref[(i + 1) % ref.length])));
+    if (inside.length) return { ok: false, msg: `${inside.map(nameOf).join(', ')} ${inside.length > 1 ? 'are' : 'is'} inside the hull, not on it.` };
+    let pos = 0, neg = 0;
+    for (let i = 0; i < result.length; i++) {
+      const v = crossV(result[i], result[(i + 1) % result.length], result[(i + 2) % result.length]);
+      if (v > 1e-9) pos++; else if (v < -1e-9) neg++;
+    }
+    if (pos && neg) return { ok: false, msg: 'All the right points, but not in boundary order.' };
+    const extra = result.length - ref.length;
+    return { ok: true, msg: `Correct hull: ${ref.length} vertices${extra ? ` plus ${extra} collinear boundary point${extra > 1 ? 's' : ''}` : ''}, ${pos ? 'counter-clockwise' : 'clockwise'}.` };
+  }
+
+  // ---------- sandbox ----------
+  const WORKER_SRC = `
+self.onmessage = (e) => {
+  const { code, points } = e.data;
+  const events = [];
+  const MAX = 20000;
+  const clean = (p) => (p && typeof p.x === 'number' && typeof p.y === 'number') ? { x: p.x, y: p.y } : null;
+  const rec = (ev) => { if (events.length >= MAX) throw new Error('Over 20,000 steps recorded. Check for an infinite loop.'); events.push(ev); };
+  const str = (v) => { try { return typeof v === 'object' ? JSON.stringify(v) : String(v); } catch (_) { return String(v); } };
+  const api = {
+    pivot: (p) => rec({ t: 'pivot', p: clean(p) }),
+    sortOrder: (arr) => rec({ t: 'order', pts: Array.from(arr || [], clean) }),
+    consider: (p) => rec({ t: 'consider', p: clean(p) }),
+    show: (arr) => rec({ t: 'stack', pts: Array.from(arr || [], clean) }),
+    log: (...a) => rec({ t: 'log', msg: a.map(str).join(' ') }),
+    cross: (o, a, b) => { const v = (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); rec({ t: 'cross', o: clean(o), a: clean(a), b: clean(b), v }); return v; }
+  };
+  const lineOf = (err) => { const m = String(err && err.stack || '').match(/(?:<anonymous>|Function):(\\d+):\\d+/); return m ? (+m[1] - 2) : null; };
+  try {
+    const fn = new Function('pivot', 'sortOrder', 'consider', 'show', 'log', 'cross',
+      code + '\\n;return typeof grahamScan === "function" ? grahamScan : null;');
+    const gs = fn(api.pivot, api.sortOrder, api.consider, api.show, api.log, api.cross);
+    if (!gs) throw new Error('Define a function named grahamScan(points).');
+    const res = gs(points.map((p) => ({ x: p.x, y: p.y })));
+    postMessage({ ok: true, events, result: Array.isArray(res) ? res.map(clean) : res === undefined ? null : 'notarray' });
+  } catch (err) {
+    postMessage({ ok: false, events, error: (err && err.name ? err.name + ': ' : '') + (err && err.message || String(err)), line: lineOf(err) });
+  }
+};`;
+  const workerURL = URL.createObjectURL(new Blob([WORKER_SRC], { type: 'text/javascript' }));
+
+  function runCode() {
+    return new Promise(resolve => {
+      let done = false;
+      let w;
+      try { w = new Worker(workerURL); } catch (e) { resolve({ ok: false, events: [], error: 'Could not start the code sandbox in this browser.' }); return; }
+      const to = setTimeout(() => { if (done) return; done = true; w.terminate(); resolve({ ok: false, events: [], error: 'Stopped after 3 seconds. Check for an infinite loop.' }); }, 3000);
+      w.onmessage = e => { if (done) return; done = true; clearTimeout(to); w.terminate(); resolve(e.data); };
+      w.onerror = e => { if (done) return; done = true; clearTimeout(to); w.terminate(); e.preventDefault(); resolve({ ok: false, events: [], error: e.message || 'Syntax error', line: null }); };
+      w.postMessage({ code: codeEl.value, points: points.map(p => ({ x: p.x, y: p.y })) });
+    });
+  }
+
+  async function run(autoplay = true) {
+    stop();
+    setStatus('idle', 'Running', 'Tracing your code…');
+    const r = await runCode();
+    errLine = r.ok ? null : r.line;
+    renderGutter();
+    let verdict = null;
+    if (r.ok) {
+      verdict = r.result === 'notarray' ? { ok: false, msg: 'grahamScan must return an array of points.' } : verify(r.result);
+      if (r.result === null && !verdict.ok) verdict.msg = 'grahamScan did not return anything. Add return stack;';
+      setStatus(verdict.ok ? 'ok' : 'err', verdict.ok ? 'Correct' : 'Not yet', `${verdict.msg} ${r.events.length} steps recorded.`);
+    } else {
+      setStatus('err', 'Error', r.error + (r.line ? ` (line ${r.line})` : '') + (r.events.length ? ` Showing the ${r.events.length} steps before it.` : ''));
+    }
+    trace = { events: r.events, result: r.ok && Array.isArray(r.result) ? r.result : null, error: r.ok ? null : r.error, verdict };
+    dirty = false;
+    $('scrub').max = trace.events.length;
+    step = 0;
+    if (autoplay) play(); else render();
+  }
+
+  function setStatus(kind, pill, msg) {
+    const s = $('status');
+    s.className = 'status ' + kind;
+    s.innerHTML = '';
+    const a = document.createElement('span'); a.className = 'pill'; a.textContent = pill;
+    const b = document.createElement('span'); b.className = 'msg'; b.textContent = msg;
+    s.append(a, b);
+  }
+
+  // ---------- playback ----------
+  const delay = () => { const v = +$('speed').value; return Math.round(1200 * Math.pow(0.015 / 1.2, v / 100) ); };
+  function play() {
+    if (!trace || dirty) { run(true); return; }
+    if (step >= trace.events.length) step = 0;
+    playing = true; updatePlayBtn();
+    tick();
+  }
+  function tick() {
+    clearTimeout(timer);
+    render();
+    if (!playing) return;
+    if (step >= trace.events.length) { playing = false; updatePlayBtn(); return; }
+    timer = setTimeout(() => { step++; tick(); }, delay());
+  }
+  function stop() { playing = false; clearTimeout(timer); updatePlayBtn(); }
+  function updatePlayBtn() {
+    const b = $('btn-play');
+    b.querySelector('span').textContent = playing ? 'Pause' : 'Play';
+    b.querySelector('svg').innerHTML = playing ? '<path d="M3 2h4v12H3zM9 2h4v12H9z"/>' : '<path d="M4 2v12l10-6z"/>';
+  }
+  function goto(n) { if (!trace) return; stop(); step = Math.max(0, Math.min(trace.events.length, n)); render(); }
+
+  // ---------- trace state ----------
+  function stateAt(k) {
+    const s = { pivot: null, order: [], stack: [], prevStack: [], consider: null, cross: null, log: null };
+    const ev = trace ? trace.events : [];
+    for (let i = 0; i < k && i < ev.length; i++) {
+      const e = ev[i];
+      if (e.t === 'pivot') s.pivot = e.p;
+      else if (e.t === 'order') s.order = e.pts;
+      else if (e.t === 'consider') s.consider = e.p;
+      else if (e.t === 'stack') { s.prevStack = s.stack; s.stack = e.pts; }
+      else if (e.t === 'log') s.log = e.msg;
+    }
+    const last = ev[k - 1], prev = ev[k - 2];
+    if (last && last.t === 'cross') s.cross = last;
+    else if (last && last.t === 'stack' && prev && prev.t === 'cross') s.cross = prev;
+    return s;
+  }
+
+  function describe(k, s) {
+    const ev = trace.events;
+    if (k === 0) return ev.length ? 'Start. Press Play or step forward.' : 'Your code ran but did not call any helper functions, so there are no steps to show.';
+    const e = ev[k - 1];
+    const done = k === ev.length;
+    let t = '';
+    switch (e.t) {
+      case 'pivot': t = e.p ? `Pivot is ${pt(e.p)}: the lowest point, ties broken by smallest x.` : 'pivot() was called without a point.'; break;
+      case 'order': t = `Sorted ${e.pts.length} points around the pivot: ${e.pts.map(nameOf).join(' → ')}`; break;
+      case 'consider': t = e.p ? `<b class="test">Next point: ${pt(e.p)}</b>` : 'consider() was called without a point.'; break;
+      case 'cross': {
+        const v = e.v, turn = v > 0 ? '<b class="good">left turn</b> (counter-clockwise)' : v < 0 ? '<b class="bad">right turn</b> (clockwise)' : '<b class="bad">collinear</b>';
+        t = `cross(${nameOf(e.o)}, ${nameOf(e.a)}, ${nameOf(e.b)}) = ${fmt(v)} → ${turn}`; break;
+      }
+      case 'stack': {
+        const a = s.prevStack, b = s.stack;
+        let what = '';
+        if (b.length === a.length + 1 && a.every((p, i) => key(p) === key(b[i]))) what = `push ${nameOf(b[b.length - 1])}`;
+        else if (b.length === a.length - 1 && b.every((p, i) => key(p) === key(a[i]))) what = `<b class="bad">pop ${nameOf(a[a.length - 1])}</b>`;
+        t = `${what ? what + '. ' : ''}Stack: [${b.map(nameOf).join(', ')}]`; break;
+      }
+      case 'log': t = escapeHTML(e.msg); break;
+    }
+    if (done && trace.error) t += `<br><b class="bad">Stopped: ${escapeHTML(trace.error)}</b>`;
+    else if (done && trace.verdict) t += `<br><b class="${trace.verdict.ok ? 'good' : 'bad'}">${escapeHTML(trace.verdict.msg)}</b>`;
+    return t;
+  }
+  const escapeHTML = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // ---------- drawing ----------
+  let view = { s: 1, ox: 0, oy: 0, cw: 0, ch: 0 };
+  const tx = x => view.ox + x * view.s;
+  const ty = y => view.oy + (H - y) * view.s;
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  function resize() {
+    const r = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const pad = 26;
+    const s = Math.min((r.width - pad * 2) / W, (r.height - pad * 2) / H);
+    view = { s, ox: (r.width - W * s) / 2 + 4, oy: (r.height - H * s) / 2 - 4, cw: r.width, ch: r.height };
+    render();
+  }
+
+  function render() {
+    const C = { bg: css('--panel'), grid: css('--grid'), major: css('--grid-major'), ink: css('--ink'), muted: css('--muted'), accent: css('--accent'), soft: css('--accent-soft'), test: css('--test'), good: css('--good'), bad: css('--bad') };
+    const { cw, ch, s } = view;
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, cw, ch);
+
+    // grid
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= W; x++) { ctx.strokeStyle = x % 2 ? C.grid : C.major; line(tx(x), ty(0), tx(x), ty(H)); }
+    for (let y = 0; y <= H; y++) { ctx.strokeStyle = y % 2 ? C.grid : C.major; line(tx(0), ty(y), tx(W), ty(y)); }
+    ctx.fillStyle = C.muted; ctx.font = '10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (let x = 0; x <= W; x += 2) ctx.fillText(x, tx(x), ty(0) + 5);
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (let y = 0; y <= H; y += 2) ctx.fillText(y, tx(0) - 6, ty(y));
+
+    const st = trace && !dirty ? stateAt(step) : null;
+    const finished = trace && !dirty && step === trace.events.length;
+
+    // final hull fill
+    if (finished && trace.result && trace.result.length >= 3) {
+      ctx.beginPath(); trace.result.forEach((p, i) => i ? ctx.lineTo(tx(p.x), ty(p.y)) : ctx.moveTo(tx(p.x), ty(p.y))); ctx.closePath();
+      ctx.fillStyle = C.soft; ctx.fill();
+      ctx.strokeStyle = trace.verdict && trace.verdict.ok ? C.accent : C.bad; ctx.lineWidth = 2.5; ctx.stroke();
+    }
+
+    // stack polyline
+    if (st && st.stack.length && !(finished && trace.result)) {
+      ctx.strokeStyle = C.accent; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+      ctx.beginPath(); st.stack.forEach((p, i) => p && (i ? ctx.lineTo(tx(p.x), ty(p.y)) : ctx.moveTo(tx(p.x), ty(p.y)))); ctx.stroke();
+    }
+
+    // cross triangle
+    if (st && st.cross && st.cross.o && st.cross.a && st.cross.b) {
+      const c = st.cross, col = c.v > 0 ? C.good : C.bad;
+      ctx.save();
+      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(tx(c.o.x), ty(c.o.y)); ctx.lineTo(tx(c.a.x), ty(c.a.y)); ctx.lineTo(tx(c.b.x), ty(c.b.y)); ctx.stroke();
+      ctx.restore();
+      arrowHead(c.a, c.b, col);
+    }
+
+    // points
+    const orderIdx = new Map();
+    if (st) st.order.forEach((p, i) => p && orderIdx.set(key(p), i + 1));
+    const onStack = new Set(st ? st.stack.filter(Boolean).map(key) : []);
+    const onHull = new Set(finished && trace.result ? trace.result.map(key) : []);
+    points.forEach((p, i) => {
+      const k = key(p), X = tx(p.x), Y = ty(p.y);
+      const hot = onStack.has(k) || onHull.has(k);
+      ctx.beginPath(); ctx.arc(X, Y, hot ? 5.5 : 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = hot ? C.accent : C.ink; ctx.fill();
+      ctx.font = '10.5px "JetBrains Mono", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+      ctx.fillStyle = C.muted;
+      ctx.fillText('P' + i, X + 6, Y - 3);
+      if (orderIdx.has(k)) {
+        ctx.fillStyle = C.accent; ctx.textBaseline = 'top'; ctx.font = '600 10.5px "JetBrains Mono", monospace';
+        ctx.fillText('#' + orderIdx.get(k), X + 6, Y + 2);
+      }
+    });
+    if (st && st.pivot) ring(st.pivot, 10, C.ink, 2);
+    if (st && st.consider && !finished) ring(st.consider, 9, C.test, 2.5);
+
+    // caption
+    if (trace && !dirty) {
+      $('stepno').textContent = `Step ${step} of ${trace.events.length}`;
+      $('caption').innerHTML = describe(step, st) + (st.log && trace.events[step - 1] && trace.events[step - 1].t !== 'log' ? `<br><span style="color:var(--muted)">log: ${escapeHTML(st.log)}</span>` : '');
+      $('scrub').value = step;
+    } else {
+      $('stepno').textContent = trace && dirty ? 'Trace out of date' : 'No trace yet';
+      $('caption').textContent = trace && dirty ? 'Points or code changed. Press Play to run again.' : 'Press Play to run your code on these points.';
+      $('scrub').value = 0;
+    }
+    ['btn-start', 'btn-back', 'btn-fwd', 'btn-end', 'scrub'].forEach(id => $(id).disabled = !trace || dirty);
+    $('count').textContent = `${points.length} point${points.length === 1 ? '' : 's'}`;
+  }
+  function line(x1, y1, x2, y2) { ctx.beginPath(); ctx.moveTo(x1 + .5, y1 + .5); ctx.lineTo(x2 + .5, y2 + .5); ctx.stroke(); }
+  function ring(p, r, col, w) { ctx.beginPath(); ctx.arc(tx(p.x), ty(p.y), r, 0, Math.PI * 2); ctx.strokeStyle = col; ctx.lineWidth = w; ctx.stroke(); }
+  function arrowHead(a, b, col) {
+    const x1 = tx(a.x), y1 = ty(a.y), x2 = tx(b.x), y2 = ty(b.y);
+    const ang = Math.atan2(y2 - y1, x2 - x1), L = 10;
+    const ex = x2 - Math.cos(ang) * 7, ey = y2 - Math.sin(ang) * 7;
+    ctx.beginPath(); ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - L * Math.cos(ang - 0.4), ey - L * Math.sin(ang - 0.4));
+    ctx.lineTo(ex - L * Math.cos(ang + 0.4), ey - L * Math.sin(ang + 0.4));
+    ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+  }
+
+  // ---------- point editing ----------
+  function toWorld(e) {
+    const r = canvas.getBoundingClientRect();
+    let x = (e.clientX - r.left - view.ox) / view.s, y = H - (e.clientY - r.top - view.oy) / view.s;
+    x = Math.max(0, Math.min(W, x)); y = Math.max(0, Math.min(H, y));
+    if ($('snap').checked) { x = Math.round(x); y = Math.round(y); } else { x = Math.round(x * 100) / 100; y = Math.round(y * 100) / 100; }
+    return { x, y };
+  }
+  function hit(e) {
+    const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    let best = -1, bd = 12;
+    points.forEach((p, i) => { const d = Math.hypot(tx(p.x) - mx, ty(p.y) - my); if (d < bd) { bd = d; best = i; } });
+    return best;
+  }
+  const exists = (p, skip = -1) => points.some((q, i) => i !== skip && key(q) === key(p));
+  function changed() { stop(); dirty = true; savePoints(); render(); }
+
+  let drag = null;
+  canvas.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    const i = hit(e);
+    if (i >= 0) { drag = { i, moved: false, sx: e.clientX, sy: e.clientY }; canvas.setPointerCapture(e.pointerId); }
+    else { const p = toWorld(e); if (!exists(p)) { points.push(p); changed(); } }
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!drag) { canvas.style.cursor = hit(e) >= 0 ? 'grab' : 'crosshair'; return; }
+    if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
+    drag.moved = true; canvas.style.cursor = 'grabbing';
+    const p = toWorld(e);
+    if (!exists(p, drag.i)) { points[drag.i] = p; changed(); }
+  });
+  canvas.addEventListener('pointerup', () => {
+    if (drag && !drag.moved) { points.splice(drag.i, 1); changed(); }
+    drag = null;
+  });
+  canvas.addEventListener('pointercancel', () => { drag = null; });
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+  function savePoints() { store.set('gsl-points', JSON.stringify(points)); }
+  function setPoints(arr) { points = arr.map(([x, y]) => ({ x, y })); changed(); }
+
+  $('btn-sample').onclick = () => setPoints(SAMPLE);
+  $('btn-clear').onclick = () => { points = []; changed(); };
+  $('btn-random').onclick = () => {
+    const seen = new Set(), arr = [];
+    while (arr.length < 15) { const x = 1 + Math.floor(Math.random() * (W - 1)), y = 1 + Math.floor(Math.random() * (H - 1)); if (!seen.has(x + ',' + y)) { seen.add(x + ',' + y); arr.push([x, y]); } }
+    setPoints(arr);
+  };
+
+  // ---------- editor ----------
+  const KW = /\b(const|let|var|function|return|if|else|for|while|do|of|in|new|break|continue|true|false|null|undefined|switch|case|default|typeof|class|this)\b/;
+  const TOKENS = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\b(const|let|var|function|return|if|else|for|while|do|of|in|new|break|continue|true|false|null|undefined|switch|case|default|typeof|class|this)\b|\b(pivot|sortOrder|consider|show|cross|log)\b(?=\s*\()|\b(\d+(?:\.\d+)?)\b/g;
+  function highlight(src) {
+    let out = '', last = 0, m;
+    TOKENS.lastIndex = 0;
+    while ((m = TOKENS.exec(src))) {
+      out += escapeHTML(src.slice(last, m.index));
+      const cls = m[1] ? 'c' : m[2] ? 's' : m[3] ? 'k' : m[4] ? 'f' : 'n';
+      out += `<span class="tk-${cls}">${escapeHTML(m[0])}</span>`;
+      last = TOKENS.lastIndex;
+    }
+    return out + escapeHTML(src.slice(last)) + '\n ';
+  }
+  function renderGutter() {
+    const n = codeEl.value.split('\n').length;
+    let h = '';
+    for (let i = 1; i <= n; i++) h += (i === errLine ? `<span class="err">${i}</span>` : i) + '\n';
+    gutterEl.innerHTML = h + ' ';
+    gutterEl.scrollTop = codeEl.scrollTop;
+  }
+  function renderCode() { hlEl.innerHTML = highlight(codeEl.value); renderGutter(); syncScroll(); }
+  function syncScroll() { hlEl.scrollTop = codeEl.scrollTop; hlEl.scrollLeft = codeEl.scrollLeft; gutterEl.scrollTop = codeEl.scrollTop; }
+  function setCode(src) { codeEl.value = src; errLine = null; onCodeChange(); }
+  function onCodeChange() { renderCode(); store.set('gsl-code', codeEl.value); if (trace && !dirty) { stop(); dirty = true; render(); } }
+
+  codeEl.addEventListener('input', onCodeChange);
+  codeEl.addEventListener('scroll', syncScroll);
+  codeEl.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run(true); return; }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const s = codeEl.selectionStart, en = codeEl.selectionEnd, v = codeEl.value;
+      if (s === en && !e.shiftKey) { codeEl.setRangeText('  ', s, en, 'end'); }
+      else {
+        const ls = v.lastIndexOf('\n', s - 1) + 1;
+        const block = v.slice(ls, en);
+        const nb = e.shiftKey ? block.replace(/^ {1,2}/gm, '') : block.replace(/^/gm, '  ');
+        codeEl.setRangeText(nb, ls, en, 'select');
+      }
+      onCodeChange();
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      const s = codeEl.selectionStart, v = codeEl.value;
+      const ls = v.lastIndexOf('\n', s - 1) + 1;
+      const indent = v.slice(ls, s).match(/^\s*/)[0] + (/[{(\[]\s*$/.test(v.slice(ls, s)) ? '  ' : '');
+      e.preventDefault();
+      codeEl.setRangeText('\n' + indent, s, codeEl.selectionEnd, 'end');
+      onCodeChange();
+    }
+  });
+
+  $('btn-run').onclick = () => run(true);
+  $('btn-solution').onclick = () => setCode(SOLUTION);
+  $('btn-starter').onclick = () => setCode(STARTER);
+  $('btn-play').onclick = () => playing ? stop() : play();
+  $('btn-start').onclick = () => goto(0);
+  $('btn-end').onclick = () => goto(trace ? trace.events.length : 0);
+  $('btn-back').onclick = () => goto(step - 1);
+  $('btn-fwd').onclick = () => goto(step + 1);
+  $('scrub').oninput = e => goto(+e.target.value);
+
+  // ---------- boot ----------
+  try { const sp = JSON.parse(store.get('gsl-points') || 'null'); points = Array.isArray(sp) && sp.length ? sp.filter(p => typeof p.x === 'number') : SAMPLE.map(([x, y]) => ({ x, y })); }
+  catch (e) { points = SAMPLE.map(([x, y]) => ({ x, y })); }
+  codeEl.value = store.get('gsl-code') || SOLUTION;
+  renderCode();
+  new ResizeObserver(resize).observe(canvas);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+  new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  if (document.fonts) document.fonts.ready.then(render);
+  resize();
+  run(false);
+})();
+</script>
